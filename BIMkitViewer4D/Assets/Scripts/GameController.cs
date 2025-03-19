@@ -57,7 +57,7 @@ public class GameController : MonoBehaviour
 
     private Model CurrentModel;
     public GameObject CurrentModelGameObj;
-    private List<ModelObjectScript> ModelObjects = new List<ModelObjectScript>();
+    private Dictionary<string, ModelObjectScript> ModelObjects = new Dictionary<string, ModelObjectScript>();
     private GameObject ViewingGameObject;
 
     private Dictionary<DateTime, List<ModelObjectScript>> ModelSchedule = new Dictionary<DateTime, List<ModelObjectScript>>();
@@ -144,9 +144,9 @@ public class GameController : MonoBehaviour
         JumpCameraToObject(ModelObjects);
     }
 
-    public void JumpCameraToObject(List<ModelObjectScript> mos)
+    public void JumpCameraToObject(Dictionary<string, ModelObjectScript> mos)
     {
-        List<Vector3D> vList = mos.SelectMany(m => m.ModelObject.Components.SelectMany(c => c.Vertices.Select(v => Vector3D.Add(v, m.ModelObject.Location)))).ToList();
+        List<Vector3D> vList = mos.SelectMany(m => m.Value.ModelObject.Components.SelectMany(c => c.Vertices.Select(v => Vector3D.Add(v, m.Value.ModelObject.Location)))).ToList();
         Utils.GetXYZDimentions(vList, out Vector3D mid, out Vector3D dims);
 
         Vector3 center = VectorConvert(mid);
@@ -201,7 +201,7 @@ public class GameController : MonoBehaviour
 
         RemoveAllChidren(CurrentModelGameObj);
 
-        ModelObjects = new List<ModelObjectScript>();
+        ModelObjects = new Dictionary<string, ModelObjectScript>();
         foreach (ModelObject obj in CurrentModel.ModelObjects)
         {
             if (obj.GetType() == typeof(ModelCatalogObject))
@@ -211,7 +211,7 @@ public class GameController : MonoBehaviour
             }
 
             ModelObjectScript script = CreateModelObject(obj, CurrentModelGameObj);
-            ModelObjects.Add(script);
+            ModelObjects.Add(obj.Id, script);
         }
 
         SetupMainCamera();
@@ -264,7 +264,7 @@ public class GameController : MonoBehaviour
             {
                 ModelSchedule.Add(date, new List<ModelObjectScript>());
             }
-            ModelSchedule[date].AddRange(ModelObjects.FindAll(mo=>mo.ModelObject.Id == id).ToList());
+            ModelSchedule[date].Add(ModelObjects[id]);
         }
     }
 
@@ -279,9 +279,16 @@ public class GameController : MonoBehaviour
         LoadingCanvas.SetActive(true);
         await Task.Delay(10);
 
+        Stopwatch s = new Stopwatch();
+        s.Start();
         LoadLocalModel(modelFile);
+        Debug.LogWarning("A: " + s.Elapsed.ToString());
+        s.Restart();
         SetMaterialForTypes();
+        Debug.LogWarning("B: " + s.Elapsed.ToString());
+        s.Restart();
         LoadLocalSchedule(scheduleFile);
+        Debug.LogWarning("C: " + s.Elapsed.ToString());
 
         DateSlider.minValue = (ModelSchedule.Min(kvp => kvp.Key) - TimeSpan.FromDays(1)).Ticks;
         DateSlider.maxValue = (ModelSchedule.Max(kvp => kvp.Key) + TimeSpan.FromDays(1)).Ticks;
@@ -350,7 +357,7 @@ public class GameController : MonoBehaviour
     {
         MaterialDict = new Dictionary<string, Material>();
         MaterialDict["Floor"] = DefaultMat;
-        foreach (ModelObjectScript mos in ModelObjects)
+        foreach (ModelObjectScript mos in ModelObjects.Values)
         {
             if (!MaterialDict.ContainsKey(mos.ModelObject.TypeId))
             {
@@ -538,7 +545,7 @@ public class GameController : MonoBehaviour
 
     private void UnHighlightAllObjects()
     {
-        foreach (ModelObjectScript mo in ModelObjects)
+        foreach (ModelObjectScript mo in ModelObjects.Values)
         {
             if (mo.IsHighlighted)
             {
