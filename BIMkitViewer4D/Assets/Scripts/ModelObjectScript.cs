@@ -29,18 +29,18 @@ public class ModelObjectScript : MonoBehaviour
     // Start is called before the first frame update
     void Start()
     {
-        LineRenderers = new List<LineRenderer>();
-        for (int i = 0; i < 3; i++)
-        {
-            LineRenderer lineRenderer = Instantiate(LinePrefab, transform).GetComponent<LineRenderer>();
+        //LineRenderers = new List<LineRenderer>();
+        //for (int i = 0; i < 3; i++)
+        //{
+        //    LineRenderer lineRenderer = Instantiate(LinePrefab, transform).GetComponent<LineRenderer>();
 
-            Color color = i == 0 ? Color.red : (i == 1 ? Color.blue : Color.green);
-            lineRenderer.startColor = color;
-            lineRenderer.endColor = color;
-            LineRenderers.Add(lineRenderer);
-        }
+        //    Color color = i == 0 ? Color.red : (i == 1 ? Color.blue : Color.green);
+        //    lineRenderer.startColor = color;
+        //    lineRenderer.endColor = color;
+        //    LineRenderers.Add(lineRenderer);
+        //}
 
-        UpdateLines();
+        //UpdateLines();
     }
 
     // Update is called once per frame
@@ -48,7 +48,7 @@ public class ModelObjectScript : MonoBehaviour
     {
         if (transform.hasChanged)
         {
-            UpdateLines();
+            //UpdateLines();
             transform.hasChanged = false;
         }
     }

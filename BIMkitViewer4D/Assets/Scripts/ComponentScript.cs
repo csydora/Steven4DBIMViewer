@@ -37,7 +37,7 @@ public class ComponentScript : MonoBehaviour
         meshCollider.sharedMesh = mesh;
 
         //Debug.Log("Before: " + Component.Vertices.Count);
-        Component.VertexAdderByTri();
+        //Component.VertexAdderByTri();
         //Debug.Log("After: " + Component.Vertices.Count);
 
         mesh.SetVertices(Component.Vertices.Select(v => GameController.VectorConvert(v)).ToArray());

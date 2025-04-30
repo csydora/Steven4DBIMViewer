@@ -37,6 +37,7 @@ public class GameController : MonoBehaviour
     public GameObject ModelViewCanvas;
     public Text ObjectDataText;
     public Slider DateSlider;
+    public Text DateText;
 
     public GameObject ModelSelectCanvas;
     public GameObject ModelLocalListViewContent;
@@ -53,14 +54,16 @@ public class GameController : MonoBehaviour
     private List<Button> modelButtons = new List<Button>();
     string modelFile = null;
     private List<Button> scheduleButtons = new List<Button>();
-    string scheduleFile = null;
+    Dictionary<string, Tuple<Button, bool>> scheduleFiles = new Dictionary<string, Tuple<Button, bool>>();
 
     private Model CurrentModel;
     public GameObject CurrentModelGameObj;
-    private Dictionary<string, ModelObjectScript> ModelObjects = new Dictionary<string, ModelObjectScript>();
     private GameObject ViewingGameObject;
 
-    private Dictionary<DateTime, List<ModelObjectScript>> ModelSchedule = new Dictionary<DateTime, List<ModelObjectScript>>();
+    private float modelGap = 50.0f;
+    private List<Dictionary<string, ModelObjectScript>> ModelObjects = new List<Dictionary<string, ModelObjectScript>>();
+    private List<Dictionary<DateTime, List<ModelObjectScript>>> ModelSchedules = new List<Dictionary<DateTime, List<ModelObjectScript>>>();
+    private List<Camera> cameras = new List<Camera>();
 
     public float cameraRotateSpeed = 1000f;
     public float cameraMoveSpeed = 100f;
@@ -93,6 +96,7 @@ public class GameController : MonoBehaviour
         {
             string[] fileNames = Directory.GetFiles(Application.dataPath + "/..//Models", "*.bpm");
             CurrentModel = DBMSReadWrite.JSONReadFromFile<Model>(fileNames[0]);
+
             List<string> csvOut = new List<string>();
             DateTime currentTime = DateTime.Now;
             foreach (ModelObject mo in CurrentModel.ModelObjects.OrderBy(mo=>mo.Location.z))
@@ -101,7 +105,18 @@ public class GameController : MonoBehaviour
                 currentTime += TimeSpan.FromDays(5);
             }
 
-            File.WriteAllLines(Application.dataPath + "/..//Schedules/TEST.csv", csvOut);
+            File.WriteAllLines(Application.dataPath + "/..//Schedules/TEST1.csv", csvOut);
+
+            csvOut = new List<string>();
+            currentTime = DateTime.Now;
+            foreach (ModelObject mo in CurrentModel.ModelObjects.OrderByDescending(mo => mo.Location.z))
+            {
+                csvOut.Add(currentTime.ToString() + "," + mo.Id);
+                currentTime += TimeSpan.FromDays(5);
+            }
+
+            File.WriteAllLines(Application.dataPath + "/..//Schedules/TEST2.csv", csvOut);
+
             GetLocalSchedules();
         }
     }
@@ -109,7 +124,7 @@ public class GameController : MonoBehaviour
     // Update is called once per frame
     void Update()
     {
-        MoveCamera();
+        MoveCameras();
         if (this.ModelViewCanvas.activeInHierarchy)
         {
             ViewingMode();
@@ -118,46 +133,55 @@ public class GameController : MonoBehaviour
 
     #region Camera Controls
 
-    private void MoveCamera()
+    private void MoveCameras()
     {
-        if (Input.GetMouseButton(1))
+        foreach (Camera c in cameras)
         {
-            MainCamera.transform.Rotate(new Vector3(-Input.GetAxis("Mouse Y") * cameraRotateSpeed * Time.deltaTime, Input.GetAxis("Mouse X") * cameraRotateSpeed * Time.deltaTime, 0));
-            float X = MainCamera.transform.rotation.eulerAngles.x;
-            float Y = MainCamera.transform.rotation.eulerAngles.y;
-            MainCamera.transform.rotation = Quaternion.Euler(X, Y, 0);
-        }
+            if (Input.GetMouseButton(1))
+            {
+                c.transform.Rotate(new Vector3(-Input.GetAxis("Mouse Y") * cameraRotateSpeed * Time.deltaTime, Input.GetAxis("Mouse X") * cameraRotateSpeed * Time.deltaTime, 0));
+                float X = c.transform.rotation.eulerAngles.x;
+                float Y = c.transform.rotation.eulerAngles.y;
+                c.transform.rotation = Quaternion.Euler(X, Y, 0);
+            }
 
-        if (Input.GetMouseButton(2))
-        {
-            var newPosition = new Vector3();
-            newPosition.x = Input.GetAxis("Mouse X") * cameraMoveSpeed * Time.deltaTime;
-            newPosition.y = Input.GetAxis("Mouse Y") * cameraMoveSpeed * Time.deltaTime;
-            MainCamera.transform.Translate(-newPosition);
-        }
+            if (Input.GetMouseButton(2))
+            {
+                var newPosition = new Vector3();
+                newPosition.x = Input.GetAxis("Mouse X") * cameraMoveSpeed * Time.deltaTime;
+                newPosition.y = Input.GetAxis("Mouse Y") * cameraMoveSpeed * Time.deltaTime;
+                c.transform.Translate(-newPosition);
+            }
 
-        MainCamera.transform.position += MainCamera.transform.forward * Input.GetAxis("Mouse ScrollWheel") * cameraScrollSensitivity;
+            c.transform.position += c.transform.forward * Input.GetAxis("Mouse ScrollWheel") * cameraScrollSensitivity;
+        }
     }
 
-    private void SetupMainCamera()
+    private void SetupNewCamera(Dictionary<string, ModelObjectScript> newModelObjects, float count, float total)
     {
-        JumpCameraToObject(ModelObjects);
+        Camera newCamera = Instantiate(MainCamera);
+        newCamera.enabled = true;
+        newCamera.rect = new Rect(count / total, 0.0f, 1.0f / total * 0.99f, 1.0f);
+
+        JumpCameraToObject(newCamera, newModelObjects, count);
+        cameras.Add(newCamera);
     }
 
-    public void JumpCameraToObject(Dictionary<string, ModelObjectScript> mos)
+    public void JumpCameraToObject(Camera camera, Dictionary<string, ModelObjectScript> mos, float count)
     {
         List<Vector3D> vList = mos.SelectMany(m => m.Value.ModelObject.Components.SelectMany(c => c.Vertices.Select(v => Vector3D.Add(v, m.Value.ModelObject.Location)))).ToList();
         Utils.GetXYZDimentions(vList, out Vector3D mid, out Vector3D dims);
 
         Vector3 center = VectorConvert(mid);
+        center = center + new Vector3(0.0f, 0.0f, count * modelGap);
         Vector3 diment = VectorConvert(dims);
 
-        MainCamera.orthographic = false;
-        MainCamera.nearClipPlane = 0.1f;
-        MainCamera.farClipPlane = 10000.0f;
+        camera.orthographic = false;
+        camera.nearClipPlane = 0.1f;
+        camera.farClipPlane = 10000.0f;
         //MainCamera.transform.position = new Vector3(center.x, center.y + 2.0f * diment.y, center.z);
-        MainCamera.transform.position = new Vector3(center.x, center.y + Mathf.Max(diment.x, diment.z) / 2.0f, center.z);
-        MainCamera.transform.LookAt(center, Vector3.up);
+        camera.transform.position = new Vector3(center.x + Mathf.Max(diment.x, diment.z) / 2.0f, center.y, center.z);
+        camera.transform.LookAt(center, Vector3.up);
     }
 
     #endregion
@@ -194,27 +218,34 @@ public class GameController : MonoBehaviour
         }
     }
 
-    private void LoadLocalModel(string modelPath)
+    private void LoadLocalModel(string modelPath, int count)
     {
         CurrentModel = DBMSReadWrite.JSONReadFromFile<Model>(modelPath);
         CurrentModel.Id = null; // Make sure the local models dont conflict with the existing (incase they happen to have the same ID)
 
         RemoveAllChidren(CurrentModelGameObj);
 
-        ModelObjects = new Dictionary<string, ModelObjectScript>();
-        foreach (ModelObject obj in CurrentModel.ModelObjects)
+        for (int counter = 0; counter < count; counter++)
         {
-            if (obj.GetType() == typeof(ModelCatalogObject))
+            GameObject newGO = new GameObject(counter.ToString());
+            Dictionary<string, ModelObjectScript> newModelObjects = new Dictionary<string, ModelObjectScript>();
+            foreach (ModelObject obj in CurrentModel.ModelObjects)
             {
-                string catId = (obj as ModelCatalogObject).CatalogId;
-                Debug.LogWarning("Missing Item: " + catId);
+                if (obj.GetType() == typeof(ModelCatalogObject))
+                {
+                    string catId = (obj as ModelCatalogObject).CatalogId;
+                    Debug.LogWarning("Missing Item: " + catId);
+                }
+
+                ModelObjectScript script = CreateModelObject(obj, newGO);
+                newModelObjects.Add(obj.Id, script);
             }
 
-            ModelObjectScript script = CreateModelObject(obj, CurrentModelGameObj);
-            ModelObjects.Add(obj.Id, script);
+            newGO.transform.parent = CurrentModelGameObj.transform;
+            newGO.transform.position = new Vector3(0, 0, counter * modelGap);
+            ModelObjects.Add(newModelObjects);
+            SetupNewCamera(newModelObjects, counter, count);
         }
-
-        SetupMainCamera();
 
         ResetCanvas();
         ModelViewCanvas.SetActive(true);
@@ -236,23 +267,20 @@ public class GameController : MonoBehaviour
         {
             Button newButton = GameObject.Instantiate(this.StandardButtonPrefab, this.ModelScheduleListViewContent.transform);
             newButton.GetComponentInChildren<Text>().text = Path.GetFileNameWithoutExtension(schedulePath);
+            scheduleFiles.Add(schedulePath, new Tuple<Button, bool>(newButton, false));
             UnityAction action = new UnityAction(() =>
             {
-                scheduleFile = schedulePath;
-                foreach (Button sb in scheduleButtons)
-                {
-                    sb.image.color = new Color(255, 255, 255);
-                }
-                newButton.image.color = new Color(0, 250, 0);
+                scheduleFiles[schedulePath] = new Tuple<Button, bool>(scheduleFiles[schedulePath].Item1, !scheduleFiles[schedulePath].Item2);
+                newButton.image.color = scheduleFiles[schedulePath].Item2 ? new Color(0, 250, 0) : new Color(255, 255, 255);
             });
             newButton.onClick.AddListener(action);
             scheduleButtons.Add(newButton);
         }
     }
 
-    private void LoadLocalSchedule(string schedulePath)
+    private void LoadLocalSchedule(string schedulePath, int count)
     {
-        ModelSchedule = new Dictionary<DateTime, List<ModelObjectScript>>();
+        Dictionary<DateTime, List<ModelObjectScript>> newModelSchedule = new Dictionary<DateTime, List<ModelObjectScript>>();
 
         string[] lines = File.ReadAllLines(schedulePath);
         foreach (string line in lines)
@@ -260,17 +288,20 @@ public class GameController : MonoBehaviour
             string[] splitLine = line.Split(',');
             DateTime date = DateTime.Parse(splitLine[0]);
             string id = splitLine[1];
-            if (!ModelSchedule.ContainsKey(date))
+            if (!newModelSchedule.ContainsKey(date))
             {
-                ModelSchedule.Add(date, new List<ModelObjectScript>());
+                newModelSchedule.Add(date, new List<ModelObjectScript>());
             }
-            ModelSchedule[date].Add(ModelObjects[id]);
+            newModelSchedule[date].Add(ModelObjects[count][id]);
         }
+
+        ModelSchedules.Add(newModelSchedule);
     }
 
     public async void StartClicked()
     {
-        if (modelFile == null || scheduleFile == null)
+        var selectedShedules = scheduleFiles.Where(sf => sf.Value.Item2).ToList();
+        if (modelFile == null || selectedShedules.Count() == 0)
         {
             Debug.LogWarning("No Model or Schedule Selected");
             return;
@@ -281,19 +312,23 @@ public class GameController : MonoBehaviour
 
         Stopwatch s = new Stopwatch();
         s.Start();
-        LoadLocalModel(modelFile);
+        LoadLocalModel(modelFile, selectedShedules.Count());
         Debug.LogWarning("A: " + s.Elapsed.ToString());
+        for (int i = 0; i < selectedShedules.Count(); i++)
+        {
+            s.Restart();
+            Debug.Log(selectedShedules[i].Key + ": " + i.ToString());
+            LoadLocalSchedule(selectedShedules[i].Key, i);
+            Debug.LogWarning("C: " + s.Elapsed.ToString());
+        }
         s.Restart();
         SetMaterialForTypes();
         Debug.LogWarning("B: " + s.Elapsed.ToString());
-        s.Restart();
-        LoadLocalSchedule(scheduleFile);
-        Debug.LogWarning("C: " + s.Elapsed.ToString());
 
-        DateSlider.minValue = (ModelSchedule.Min(kvp => kvp.Key) - TimeSpan.FromDays(1)).Ticks;
-        DateSlider.maxValue = (ModelSchedule.Max(kvp => kvp.Key) + TimeSpan.FromDays(1)).Ticks;
+        DateSlider.minValue = (ModelSchedules.SelectMany(ms=>ms.Keys).Min() - TimeSpan.FromDays(1)).Ticks;
+        DateSlider.maxValue = (ModelSchedules.SelectMany(ms => ms.Keys).Max() + TimeSpan.FromDays(1)).Ticks;
         DateSlider.onValueChanged.AddListener(delegate { UpdateDisplayTime(); });
-        DateSlider.value = ModelSchedule.Max(kvp => kvp.Key).Ticks;
+        DateSlider.value = ModelSchedules.SelectMany(ms => ms.Keys).Max().Ticks;
 
         LoadingCanvas.SetActive(false);
     }
@@ -357,18 +392,21 @@ public class GameController : MonoBehaviour
     {
         MaterialDict = new Dictionary<string, Material>();
         MaterialDict["Floor"] = DefaultMat;
-        foreach (ModelObjectScript mos in ModelObjects.Values)
+        foreach (var mosGroup in ModelObjects)
         {
-            if (!MaterialDict.ContainsKey(mos.ModelObject.TypeId))
+            foreach (ModelObjectScript mos in mosGroup.Values)
             {
-                Material newMat = new Material(DefaultMat);
-                newMat.color = UnityEngine.Random.ColorHSV(0f, 1f, 0.2f, 0.2f, 0.9f, 0.9f);
-                MaterialDict[mos.ModelObject.TypeId] = newMat;
-            }
+                if (!MaterialDict.ContainsKey(mos.ModelObject.TypeId))
+                {
+                    Material newMat = new Material(DefaultMat);
+                    newMat.color = UnityEngine.Random.ColorHSV(0f, 1f, 0.2f, 0.2f, 0.9f, 0.9f);
+                    MaterialDict[mos.ModelObject.TypeId] = newMat;
+                }
 
-            foreach (ComponentScript cs in mos.ComponentScripts)
-            {
-                cs.SetMainMaterial(MaterialDict[mos.ModelObject.TypeId]);
+                foreach (ComponentScript cs in mos.ComponentScripts)
+                {
+                    cs.SetMainMaterial(MaterialDict[mos.ModelObject.TypeId]);
+                }
             }
         }
     }
@@ -406,11 +444,13 @@ public class GameController : MonoBehaviour
             }
         }
 
-        Ray ray = MainCamera.ScreenPointToRay(Input.mousePosition);
-        RaycastHit hitData;
-        if (Physics.Raycast(ray, out hitData, 1000))
+        foreach (Camera cam in cameras)
         {
-            GameObject hitObject = hitData.collider.gameObject;
+            Ray ray = cam.ScreenPointToRay(Input.mousePosition);
+            RaycastHit hitData;
+            if (Physics.Raycast(ray, out hitData, 1000))
+            {
+                GameObject hitObject = hitData.collider.gameObject;
                 // Hit a model object component
                 if (hitObject.transform.parent == null)
                 {
@@ -419,18 +459,19 @@ public class GameController : MonoBehaviour
                 }
                 ViewingGameObject = hitObject.transform.parent.gameObject;
 
-            mos = ViewingGameObject.GetComponent<ModelObjectScript>();
-            if (mos != null)
-            {
-                //mos.Highlight(HighlightMatYellow);
-                DisplayObjectInfo(mos);
-            }
+                mos = ViewingGameObject.GetComponent<ModelObjectScript>();
+                if (mos != null)
+                {
+                    //mos.Highlight(HighlightMatYellow);
+                    DisplayObjectInfo(mos);
+                }
 
-            ComponentScript cs = hitObject.GetComponent<ComponentScript>();
-            if (cs != null)
-            {
-                //cs.Highlight(HighlightMatRed);
-                DisplayComponentInfo(cs);
+                ComponentScript cs = hitObject.GetComponent<ComponentScript>();
+                if (cs != null)
+                {
+                    //cs.Highlight(HighlightMatRed);
+                    DisplayComponentInfo(cs);
+                }
             }
         }
     }
@@ -475,7 +516,8 @@ public class GameController : MonoBehaviour
     {
         DateTime displayTime = new DateTime((long) DateSlider.value);
 
-        foreach (var kvpair in ModelSchedule)
+        DateText.text = displayTime.ToString();
+        foreach (var kvpair in ModelSchedules.SelectMany(kvp=>kvp))
         {
             if (kvpair.Key < displayTime)
             {
@@ -545,11 +587,14 @@ public class GameController : MonoBehaviour
 
     private void UnHighlightAllObjects()
     {
-        foreach (ModelObjectScript mo in ModelObjects.Values)
+        foreach (var mosGroup in ModelObjects)
         {
-            if (mo.IsHighlighted)
+            foreach (ModelObjectScript mo in mosGroup.Values)
             {
-                mo.UnHighlight();
+                if (mo.IsHighlighted)
+                {
+                    mo.UnHighlight();
+                }
             }
         }
     }
