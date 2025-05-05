@@ -292,7 +292,14 @@ public class GameController : MonoBehaviour
             {
                 newModelSchedule.Add(date, new List<ModelObjectScript>());
             }
-            newModelSchedule[date].Add(ModelObjects[count][id]);
+            if (ModelObjects[count].ContainsKey(id))
+            {
+                newModelSchedule[date].Add(ModelObjects[count][id]);
+            }
+            else
+            {
+                Debug.Log("ID not found: " + id);
+            }
         }
 
         ModelSchedules.Add(newModelSchedule);
@@ -319,11 +326,15 @@ public class GameController : MonoBehaviour
             s.Restart();
             Debug.Log(selectedShedules[i].Key + ": " + i.ToString());
             LoadLocalSchedule(selectedShedules[i].Key, i);
-            Debug.LogWarning("C: " + s.Elapsed.ToString());
+            Debug.LogWarning("B: " + s.Elapsed.ToString());
         }
         s.Restart();
         SetMaterialForTypes();
-        Debug.LogWarning("B: " + s.Elapsed.ToString());
+        Debug.LogWarning("C: " + s.Elapsed.ToString());
+
+        s.Restart();
+        HideSchedulelessObjects();
+        Debug.LogWarning("D: " + s.Elapsed.ToString());
 
         DateSlider.minValue = (ModelSchedules.SelectMany(ms=>ms.Keys).Min() - TimeSpan.FromDays(1)).Ticks;
         DateSlider.maxValue = (ModelSchedules.SelectMany(ms => ms.Keys).Max() + TimeSpan.FromDays(1)).Ticks;
@@ -331,6 +342,23 @@ public class GameController : MonoBehaviour
         DateSlider.value = ModelSchedules.SelectMany(ms => ms.Keys).Max().Ticks;
 
         LoadingCanvas.SetActive(false);
+    }
+
+    private void HideSchedulelessObjects()
+    {
+        List<ModelObjectScript> scheduleMos = ModelSchedules.SelectMany(m => m.Values.SelectMany(mos => mos)).Distinct().ToList();
+        foreach (ModelObjectScript mos in ModelObjects.SelectMany(m => m.Values))
+        {
+            if (!scheduleMos.Contains(mos))
+            {
+                foreach (ComponentScript cs in mos.ComponentScripts)
+                {
+                    cs.SetMainMaterial(HighlightMatRed);
+                }
+            }
+
+            mos.UnHighlight();
+        }
     }
 
     #endregion
@@ -391,7 +419,6 @@ public class GameController : MonoBehaviour
     private void SetMaterialForTypes()
     {
         MaterialDict = new Dictionary<string, Material>();
-        MaterialDict["Floor"] = DefaultMat;
         foreach (var mosGroup in ModelObjects)
         {
             foreach (ModelObjectScript mos in mosGroup.Values)
@@ -515,14 +542,16 @@ public class GameController : MonoBehaviour
     private void UpdateDisplayTime()
     {
         DateTime displayTime = new DateTime((long) DateSlider.value);
+        List<ModelObjectScript> highlightedObjs = new List<ModelObjectScript>();
 
         DateText.text = displayTime.ToString();
-        foreach (var kvpair in ModelSchedules.SelectMany(kvp=>kvp))
+        foreach (var kvpair in ModelSchedules.SelectMany(kvp=>kvp).OrderBy(ms=>ms.Key))
         {
             if (kvpair.Key < displayTime)
             {
                 foreach (ModelObjectScript mos in kvpair.Value)
                 {
+                    highlightedObjs.Add(mos);
                     mos.UnHighlight();
                 }
             }
@@ -530,7 +559,15 @@ public class GameController : MonoBehaviour
             {
                 foreach (ModelObjectScript mos in kvpair.Value)
                 {
-                    mos.Highlight(InvisibleMat);
+                    if (highlightedObjs.Contains(mos))
+                    {
+                        Debug.Log("Incomplete Found");
+                        mos.Highlight(HighlightMatYellow);
+                    }
+                    else
+                    {
+                        mos.Highlight(InvisibleMat);
+                    }
                 }
             }
         }
