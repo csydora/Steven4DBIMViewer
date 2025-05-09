@@ -21,7 +21,7 @@ public class ModelObjectScript : MonoBehaviour
     }
     private ModelObject modelObject;
     public List<ComponentScript> ComponentScripts;
-    public bool IsHighlighted;
+    public bool IsHighlighted = false;
 
     public GameObject LinePrefab;
     private List<LineRenderer> LineRenderers;
@@ -71,6 +71,7 @@ public class ModelObjectScript : MonoBehaviour
         LineRenderers[2].SetPosition(1, up * 0.5f + location);
     }
 
+    private Material currentHighlightMat = null;
     public void Highlight(Material material)
     {
         IsHighlighted = true;

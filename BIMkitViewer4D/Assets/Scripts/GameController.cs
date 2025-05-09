@@ -65,9 +65,10 @@ public class GameController : MonoBehaviour
     private List<Dictionary<DateTime, List<ModelObjectScript>>> ModelSchedules = new List<Dictionary<DateTime, List<ModelObjectScript>>>();
     private List<Camera> cameras = new List<Camera>();
 
-    public float cameraRotateSpeed = 1000f;
-    public float cameraMoveSpeed = 100f;
-    public float cameraScrollSensitivity = 10f;
+    public float cameraRotateSpeed = 1000.0f;
+    public float cameraMoveSpeed = 100.0f;
+    public float cameraScrollSensitivity = 10.0f;
+    public float timeSpeed = 1.0f;
 
     #endregion
 
@@ -99,7 +100,7 @@ public class GameController : MonoBehaviour
 
             List<string> csvOut = new List<string>();
             DateTime currentTime = DateTime.Now;
-            foreach (ModelObject mo in CurrentModel.ModelObjects.OrderBy(mo=>mo.Location.z))
+            foreach (ModelObject mo in CurrentModel.ModelObjects.OrderBy(mo => mo.Location.z))
             {
                 csvOut.Add(currentTime.ToString() + "," + mo.Id);
                 currentTime += TimeSpan.FromDays(5);
@@ -119,6 +120,8 @@ public class GameController : MonoBehaviour
 
             GetLocalSchedules();
         }
+
+        DateSlider.value = DateSlider.minValue;
     }
 
     // Update is called once per frame
@@ -128,6 +131,11 @@ public class GameController : MonoBehaviour
         if (this.ModelViewCanvas.activeInHierarchy)
         {
             ViewingMode();
+        }
+
+        if (DateSlider.value < DateSlider.maxValue)
+        {
+            DateSlider.value = Mathf.Min(DateSlider.maxValue, DateSlider.value + (new TimeSpan(7, 0, 0, 0)).Ticks * timeSpeed * Time.deltaTime);
         }
     }
 
@@ -336,7 +344,7 @@ public class GameController : MonoBehaviour
         HideSchedulelessObjects();
         Debug.LogWarning("D: " + s.Elapsed.ToString());
 
-        DateSlider.minValue = (ModelSchedules.SelectMany(ms=>ms.Keys).Min() - TimeSpan.FromDays(1)).Ticks;
+        DateSlider.minValue = (ModelSchedules.SelectMany(ms => ms.Keys).Min() - TimeSpan.FromDays(1)).Ticks;
         DateSlider.maxValue = (ModelSchedules.SelectMany(ms => ms.Keys).Max() + TimeSpan.FromDays(1)).Ticks;
         DateSlider.onValueChanged.AddListener(delegate { UpdateDisplayTime(); });
         DateSlider.value = ModelSchedules.SelectMany(ms => ms.Keys).Max().Ticks;
@@ -358,6 +366,21 @@ public class GameController : MonoBehaviour
             }
 
             mos.UnHighlight();
+        }
+    }
+
+    public void StartStopClicked()
+    {
+        if (timeSpeed == 0.0f)
+        {
+            timeSpeed = 1.0f;
+        }
+        else
+        {
+            if (timeSpeed > 0.0f)
+            {
+                timeSpeed = 0.0f;
+            }
         }
     }
 
@@ -541,17 +564,20 @@ public class GameController : MonoBehaviour
 
     private void UpdateDisplayTime()
     {
-        DateTime displayTime = new DateTime((long) DateSlider.value);
-        List<ModelObjectScript> highlightedObjs = new List<ModelObjectScript>();
+        DateTime displayTime = new DateTime((long)DateSlider.value);
+        Dictionary<ModelObjectScript, ModelObjectScript> highlightedObjs = new Dictionary<ModelObjectScript, ModelObjectScript>();
 
         DateText.text = displayTime.ToString();
-        foreach (var kvpair in ModelSchedules.SelectMany(kvp=>kvp).OrderBy(ms=>ms.Key))
+        foreach (var kvpair in ModelSchedules.SelectMany(kvp => kvp).OrderBy(ms => ms.Key))
         {
             if (kvpair.Key < displayTime)
             {
                 foreach (ModelObjectScript mos in kvpair.Value)
                 {
-                    highlightedObjs.Add(mos);
+                    if (!highlightedObjs.ContainsKey(mos))
+                    {
+                        highlightedObjs.Add(mos, mos);
+                    }
                     mos.UnHighlight();
                 }
             }
@@ -559,9 +585,8 @@ public class GameController : MonoBehaviour
             {
                 foreach (ModelObjectScript mos in kvpair.Value)
                 {
-                    if (highlightedObjs.Contains(mos))
+                    if (highlightedObjs.ContainsKey(mos))
                     {
-                        Debug.Log("Incomplete Found");
                         mos.Highlight(HighlightMatYellow);
                     }
                     else
